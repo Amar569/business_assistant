@@ -4,9 +4,9 @@ import 'package:business_assistant/data/services/pdf_storage_service.dart';
 import 'package:business_assistant/domain/entities/customer_entity.dart';
 import 'package:business_assistant/presentation/bloc/customer/customer_bloc.dart';
 import 'package:business_assistant/presentation/bloc/customer/customer_state.dart';
-import 'package:business_assistant/presentation/screens/widgets/share_invoice_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:business_assistant/domain/entities/invoice_entity.dart';
 import 'package:business_assistant/presentation/bloc/invoice/invoice_bloc.dart';
 import 'package:business_assistant/presentation/bloc/invoice/invoice_event.dart';
@@ -172,63 +172,53 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     context.read<InvoiceBloc>().add(DeleteInvoice(invoice.id));
   }
 
-  // Future<void> _shareInvoice(
-  //     BuildContext context, InvoiceEntity invoice) async {
-  //   final customerState = context.read<CustomerBloc>().state;
-  //   CustomerEntity? customer;
-  //   if (customerState is CustomerLoaded) {
-  //     try {
-  //       customer = customerState.customers
-  //           .firstWhere((c) => c.id == invoice.customerId);
-  //     } catch (_) {
-  //       customer = null;
-  //     }
-  //   }
+  Future<void> _shareInvoice(
+  BuildContext context, InvoiceEntity invoice) async {
+  final customerState = context.read<CustomerBloc>().state;
+  CustomerEntity? customer;
+  if (customerState is CustomerLoaded) {
+    try {
+      customer = customerState.customers
+          .firstWhere((c) => c.id == invoice.customerId);
+      } catch (_) {
+        customer = null;
+      }
+    }
 
-  //   if (customer == null) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(
-  //           content: Text('Could not find customer details for this invoice'),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     }
-  //     return;
-  //   }
+  if (customer == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not find customer details for this invoice'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
 
-  //   try {
-  //     final businessInfo = await BusinessInfoService.load();
-  //     final pdfFile =
-  //         await getIt<PdfStorageService>().generateAndSaveInvoicePdf(
-  //       invoice: invoice,
-  //       customer: customer,
-  //       businessInfo: businessInfo,
-  //     );
+  try {
+    final businessInfo = await BusinessInfoService.load();
+    final pdfFile =
+        await getIt<PdfStorageService>().generateAndSaveInvoicePdf(
+      invoice: invoice,
+      customer: customer,
+      businessInfo: businessInfo,
+    );
 
-  //     if (context.mounted) {
-  //       await showDialog(
-  //         context: context,
-  //         builder: (_) => ShareInvoiceDialog(
-  //           pdfFile: pdfFile,
-  //           invoice: invoice,
-  //           customer: customer!,
-  //           businessName: (businessInfo['name'] as String?) ?? '',
-  //         ),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     debugPrint('PDF generation failed: $e');
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Failed to share invoice: $e'),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     }
-  //   }
-  // }
+  await Share.shareXFiles(
+    [XFile(pdfFile.path, mimeType: 'application/pdf')],
+      subject: 'Invoice ${invoice.invoiceNumber}',
+  );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not share invoice: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+ }
 
   Color _statusColor(String status) {
     switch (status) {
@@ -306,6 +296,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                 itemCount: invoices.length,
                 itemBuilder: (context, index) {
                   final invoice = invoices[index];
+                  final nextStatuses = _validNextStatuses(invoice.status);
 
                   return Card(
                     margin: const EdgeInsets.symmetric(
@@ -317,88 +308,6 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       subtitle: Text(
                         '${invoice.date}  •  Rs${invoice.total.toStringAsFixed(2)}',
                       ),
-                      // trailing: Row(
-                      //   mainAxisSize: MainAxisSize.min,
-                      //   children: [
-                      //     Column(
-                      //       crossAxisAlignment: CrossAxisAlignment.end,
-                      //       mainAxisAlignment: MainAxisAlignment.center,
-                      //       children: [
-                      //         Text(
-                      //           'Rs${invoice.total.toStringAsFixed(2)}',
-                      //           style: const TextStyle(
-                      //               fontWeight: FontWeight.bold),
-                      //         ),
-                      //         const SizedBox(height: 4),
-                      //         Container(
-                      //           padding: const EdgeInsets.symmetric(
-                      //               horizontal: 8, vertical: 2),
-                      //           decoration: BoxDecoration(
-                      //             color: _statusColor(invoice.status)
-                      //                 .withOpacity(0.15),
-                      //             borderRadius: BorderRadius.circular(4),
-                      //           ),
-                      //           child: Text(
-                      //             invoice.status,
-                      //             style: TextStyle(
-                      //               fontSize: 11,
-                      //               color: _statusColor(invoice.status),
-                      //               fontWeight: FontWeight.w600,
-                      //             ),
-                      //           ),
-                      //         ),
-                      //       ],
-                      //     ),
-                      //     PopupMenuButton<String>(
-                      //       icon: const Icon(Icons.more_vert, size: 20),
-                      //       onSelected: (value) {
-                      //         if (value == 'share') {
-                      //           _shareInvoice(context, invoice);
-                      //         } else if (value == 'delete') {
-                      //           _deleteInvoice(context, invoice);
-                      //         } else if (_validNextStatuses(invoice.status)
-                      //             .contains(value)) {
-                      //           _changeInvoiceStatus(context, invoice, value);
-                      //         }
-                      //       },
-                      //       itemBuilder: (context) => [
-                      //         const PopupMenuItem(
-                      //           value: 'share',
-                      //           child: Row(
-                      //             children: [
-                      //               Icon(Icons.share, size: 20),
-                      //               SizedBox(width: 8),
-                      //               Text('Share PDF'),
-                      //             ],
-                      //           ),
-                      //         ),
-                      //         if (_validNextStatuses(invoice.status)
-                      //             .isNotEmpty) ...[
-                      //           const PopupMenuDivider(),
-                      //           ..._validNextStatuses(invoice.status).map(
-                      //             (status) => PopupMenuItem(
-                      //               value: status,
-                      //               child: Text('Mark as $status'),
-                      //             ),
-                      //           ),
-                      //         ],
-                      //         const PopupMenuDivider(),
-                      //         const PopupMenuItem(
-                      //           value: 'delete',
-                      //           child: Row(
-                      //             children: [
-                      //               Icon(Icons.delete,
-                      //                   size: 20, color: Colors.red),
-                      //               SizedBox(width: 8),
-                      //               Text('Delete',
-                      //                   style: TextStyle(color: Colors.red)),
-                      //             ],
-                      //           ),
-                      //         ),
-                      //       ],
-                      //     ),
-                      //   ],
-                      // ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -439,35 +348,46 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                           PopupMenuButton<String>(
                             icon: const Icon(Icons.more_vert, size: 20),
                             onSelected: (value) {
-                              if (value == 'delete') {
-                                _deleteInvoice(context, invoice);
-                              } else if (_validNextStatuses(invoice.status)
-                                  .contains(value)) {
-                                _changeInvoiceStatus(context, invoice, value);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              ..._validNextStatuses(invoice.status).map(
+                            if (value == 'share') {
+                              _shareInvoice(context, invoice);
+                            } else if (value == 'delete') {
+                              _deleteInvoice(context, invoice);
+                            } else if (nextStatuses.contains(value)) {
+                              _changeInvoiceStatus(context, invoice, value);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'share',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.share, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Send as PDF'),
+                                ],
+                              ),
+                            ),
+                            if (nextStatuses.isNotEmpty) ...[
+                              const PopupMenuDivider(),
+                              ...nextStatuses.map(
                                 (status) => PopupMenuItem(
                                   value: status,
                                   child: Text('Mark as $status'),
                                 ),
                               ),
-                              if (_validNextStatuses(invoice.status).isNotEmpty)
-                                const PopupMenuDivider(),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete,
-                                        size: 20, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Delete',
-                                        style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                              ),
                             ],
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete, size: 20, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Delete', style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ],
                           ),
                         ],
                       ),
